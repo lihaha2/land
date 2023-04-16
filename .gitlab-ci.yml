@@ -1,0 +1,68 @@
+variables:
+  SERVICE_NAME: $CI_PROJECT_NAME
+  AWS_ECR_USER: 899260217834.dkr.ecr.us-east-1.amazonaws.com
+  ENV_ARTIFACT_NAME: build.env
+
+include:
+    - project: "DEVOPS/ci-scripts"
+      ref: feature/pipeline_generics
+      file: importme.yml
+
+stages:
+    - versioning
+    - sonarqube
+    - container_build
+    - push
+    - deploy
+
+versioning:
+    stage: versioning
+    extends:
+        - .version:bump
+    tags:
+        - linux
+
+sonarqube-check:
+  stage: sonarqube
+  extends:
+    - .test:sonarqube
+  tags:
+      - linux
+
+container_build:
+    stage: container_build
+    variables:
+      CONTAINER_PATH: $AWS_ECR_USER
+      DOCKERFILE: "Dockerfile"
+    extends:
+        - .build_and_tag
+    dependencies:
+        - versioning
+    tags:
+        - linux
+    only:
+        - main
+
+push_to_aws:
+    stage: push
+    variables:
+      SET_LATEST: "true"
+      CLEANUP: "true"
+    extends:
+        - .push:aws
+    dependencies:
+        - versioning
+    tags:
+        - linux
+    only:
+        - main
+
+deploy_dev:
+    stage: deploy
+    extends:
+        - .run:compose:service
+    tags:
+        - dev
+    when: manual
+    only:
+        - main
